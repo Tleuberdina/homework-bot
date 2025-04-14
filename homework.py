@@ -30,8 +30,8 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Возвращает переменные окружения."""
-    CHECK_TOKENS = ("PRACTICUM_TOKEN", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID")
-    for token in CHECK_TOKENS:
+    check_tokens = ("PRACTICUM_TOKEN", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID")
+    for token in check_tokens:
         if not globals()[token]:
             text_critical_error = f'Отсутствуюет переменная окружения: {token}'
             logging.critical(text_critical_error)
