@@ -30,13 +30,14 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Возвращает переменные окружения."""
-    check_tokens = ("PRACTICUM_TOKEN", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID")
-    for token in check_tokens:
-        if not globals()[token]:
-            text_critical_error = f'Отсутствуюет переменная окружения: {token}'
-            logging.critical(text_critical_error)
-            sys.exit(text_critical_error)
-    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
+    check_tokens = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
+    empty_tokens = [token for token in check_tokens if not globals()[token]]
+    if len(empty_tokens) > 0:
+        text_critical_error = (
+            f'Отсутствуют переменные окружения: {empty_tokens}'
+        )
+        logging.critical(text_critical_error)
+        sys.exit(text_critical_error)
 
 
 def send_message(bot, message):
@@ -52,26 +53,22 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """Отправляет запрос к единственному эндпоинту API-сервиса."""
+    logging.info('Начинаем запрос API(ENDPOINT, HEADERS, payload)')
+    payload = {'from_date': timestamp}
     try:
-        logging.info('Начинаем запрос API(ENDPOINT, HEADERS, payload)')
-        payload = {'from_date': timestamp}
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
-        if response.status_code != HTTPStatus.OK:
-            raise ValueError(
-                'При отправке запроса к API вернулся код отличный от 200',
-                response.reason
-            )
+    except requests.RequestException as error:
+        logging.info(
+            f'Ошибка при запросе к API:(ENDPOINT, HEADERS, payload): {error}'
+        )
+    if response.status_code == HTTPStatus.OK:
         logging.info(
             'Успешное завершение запроса к API(ENDPOINT, HEADERS, payload)'
         )
         return response.json()
-    except ConnectionError as error:
-        logging.debug(
-            f'Ошибка при запросе к API:(ENDPOINT, HEADERS, payload): {error}'
-        )
-    except requests.RequestException as error:
-        logging.debug(
-            f'Ошибка при запросе к API:(ENDPOINT, HEADERS, payload): {error}'
+    else:
+        raise ValueError(
+            f'При отправке запроса к API вернулся код:{response.reason}'
         )
 
 
@@ -80,17 +77,16 @@ def check_response(response):
     logging.info('Начинаем проверку ответа API')
     if not isinstance(response, dict):
         raise TypeError(f'Тип ответа API {type(response)} ожидаем словарь')
-    if ['homeworks'] in response.get('homeworks'):
-        if not isinstance(response.get('homeworks'), list):
-            raise TypeError(
-                'Ожидаем список тип ответа API под ключом homeworks',
-                {type(response.get('homeworks'))})
-    if (['homeworks'] or (['current_date']) not in response.get()):
+    if ['homeworks'] not in response.get('homeworks'):
         logging.info('Успешная проверка ответа API')
         return response
+    elif not isinstance(response.get('homeworks'), list):
+        raise TypeError(
+            'Ожидаем список тип ответа API под ключом homeworks',
+            {type(response.get('homeworks'))})
     else:
         raise KeyError(
-            'В ответе API отсутствуют ключи homeworks или current_date'
+            'В ответе API отсутствует ключ homeworks'
         )
 
 
@@ -114,10 +110,7 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
-        text_critical_error = 'Отсутствуют обязательные переменные окружения'
-        logging.critical(text_critical_error)
-        sys.exit(text_critical_error)
+    check_tokens()
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     empty_message = ''
@@ -127,10 +120,9 @@ def main():
             homeworks = check_response(response)
             if homeworks['homeworks']:
                 message = parse_status(homeworks['homeworks'][0])
+                send_message(bot, message)
             else:
-                message = 'Отсутствуют новые статусы'
-                logging.debug(message)
-            send_message(bot, message)
+                logging.debug('Отсутствуют новые статусы')
             timestamp = response.get('current_date', int(time.time()))
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
