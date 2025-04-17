@@ -32,7 +32,7 @@ def check_tokens():
     """Возвращает переменные окружения."""
     check_tokens = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
     empty_tokens = [token for token in check_tokens if not globals()[token]]
-    if len(empty_tokens) > 0:
+    if empty_tokens:
         text_critical_error = (
             f'Отсутствуют переменные окружения: {empty_tokens}'
         )
@@ -58,18 +58,17 @@ def get_api_answer(timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
     except requests.RequestException as error:
-        logging.info(
+        raise ConnectionError(
             f'Ошибка при запросе к API:(ENDPOINT, HEADERS, payload): {error}'
         )
-    if response.status_code == HTTPStatus.OK:
-        logging.info(
-            'Успешное завершение запроса к API(ENDPOINT, HEADERS, payload)'
-        )
-        return response.json()
-    else:
+    if not response.status_code == HTTPStatus.OK:
         raise ValueError(
             f'При отправке запроса к API вернулся код:{response.reason}'
         )
+    logging.info(
+        'Успешное завершение запроса к API(ENDPOINT, HEADERS, payload)'
+    )
+    return response.json()
 
 
 def check_response(response):
@@ -77,17 +76,17 @@ def check_response(response):
     logging.info('Начинаем проверку ответа API')
     if not isinstance(response, dict):
         raise TypeError(f'Тип ответа API {type(response)} ожидаем словарь')
-    if ['homeworks'] not in response.get('homeworks'):
-        logging.info('Успешная проверка ответа API')
-        return response
+    if 'homeworks' not in response:
+        raise KeyError(
+            'В ответе API отсутствует ключ homeworks'
+        )
     elif not isinstance(response.get('homeworks'), list):
         raise TypeError(
             'Ожидаем список тип ответа API под ключом homeworks',
             {type(response.get('homeworks'))})
     else:
-        raise KeyError(
-            'В ответе API отсутствует ключ homeworks'
-        )
+        logging.info('Успешная проверка ответа API')
+        return response
 
 
 def parse_status(homework):
@@ -121,6 +120,7 @@ def main():
             if homeworks['homeworks']:
                 message = parse_status(homeworks['homeworks'][0])
                 send_message(bot, message)
+                empty_message = message
             else:
                 logging.debug('Отсутствуют новые статусы')
             timestamp = response.get('current_date', int(time.time()))
